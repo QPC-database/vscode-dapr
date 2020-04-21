@@ -4,6 +4,7 @@
 import * as vscode from 'vscode';
 import Timer from '../util/timer';
 import { ProcessProvider } from './processProvider';
+import { MdnsClient } from './mdnsClient';
 
 export interface DaprApplication {
     appId: string;
@@ -53,6 +54,33 @@ function toApplication(cmd: string | undefined, pid: number): DaprApplication | 
     }
 
     return undefined;
+}
+
+export class MdnsBasedDaprApplicationProvider extends vscode.Disposable implements DaprApplicationProvider {
+    private applications: DaprApplication[] | undefined;
+    private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
+    private readonly listener: vscode.Disposable;
+
+    constructor(private readonly mdnsClient: MdnsClient) {
+        super(() => {
+            this.listener.dispose();
+            this.onDidChangeEmitter.dispose();
+        });
+
+        this.listener = this.mdnsClient.onServiceUp(service => {
+            this.onDidChangeEmitter.fire();
+        });
+    }
+    
+    get onDidChange(): vscode.Event<void> {
+        return this.onDidChangeEmitter.event;
+    }
+
+    async getApplications(): Promise<DaprApplication[]> {
+        await this.mdnsClient.start('_dapr._tcp.local');
+
+        return Promise.resolve(this.applications ?? []);
+    }
 }
 
 export default class ProcessBasedDaprApplicationProvider extends vscode.Disposable implements DaprApplicationProvider {

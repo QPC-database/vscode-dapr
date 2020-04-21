@@ -488,6 +488,7 @@
 		"axios": "^0.19.2",
 		"fs-extra": "^9.0.0",
 		"handlebars": "^4.7.6",
+		"multicast-dns": "^7.2.2",
 		"ps-list": "^7.0.0",
 		"vscode-azureextensionui": "^0.29.12",
 		"vscode-nls": "^4.1.2"
