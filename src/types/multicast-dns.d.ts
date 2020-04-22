@@ -1,5 +1,7 @@
 declare namespace mdns
 {
+    type MdnsRecordType = 'A' | 'PTR' | 'SRV' | 'TXT';
+
     interface MdnsServerData {
         port: number;
         priority: number;
@@ -13,7 +15,7 @@ declare namespace mdns
         flush: boolean;
         name: string;
         ttl: number;
-        type: 'A' | 'PTR' | 'SRV' | 'TXT';
+        type: MdnsRecordType;
     }
 
     interface MdnsAddressAnswer extends MdnsAnswer {
@@ -38,7 +40,7 @@ declare namespace mdns
 
     interface MdnsQuestion {
         name: string;
-        type: string;
+        type: MdnsRecordType;
     }
 
     interface MdnsPacket {

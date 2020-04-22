@@ -4,12 +4,12 @@
 import * as vscode from 'vscode';
 import Timer from '../util/timer';
 import { ProcessProvider } from './processProvider';
-import { MdnsClient } from './mdnsClient';
+import { MdnsClient, MdnsProvider, MdnsService } from './mdnsProvider';
 
 export interface DaprApplication {
     appId: string;
     httpPort: number;
-    pid: number;
+    pid?: number;
 }
 
 export interface DaprApplicationProvider {
@@ -57,18 +57,20 @@ function toApplication(cmd: string | undefined, pid: number): DaprApplication | 
 }
 
 export class MdnsBasedDaprApplicationProvider extends vscode.Disposable implements DaprApplicationProvider {
-    private applications: DaprApplication[] | undefined;
+    private applications: DaprApplication[] = [];
+    private downListener: vscode.Disposable | undefined;
     private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
-    private readonly listener: vscode.Disposable;
+    private mdnsClient: MdnsClient | undefined;
+    private upListener: vscode.Disposable | undefined;
 
-    constructor(private readonly mdnsClient: MdnsClient) {
+    constructor(private readonly mdnsProvider: MdnsProvider) {
         super(() => {
-            this.listener.dispose();
-            this.onDidChangeEmitter.dispose();
-        });
+            this.downListener?.dispose();
+            this.upListener?.dispose();
 
-        this.listener = this.mdnsClient.onServiceUp(service => {
-            this.onDidChangeEmitter.fire();
+            this.mdnsClient?.dispose();
+
+            this.onDidChangeEmitter.dispose();
         });
     }
     
@@ -77,9 +79,63 @@ export class MdnsBasedDaprApplicationProvider extends vscode.Disposable implemen
     }
 
     async getApplications(): Promise<DaprApplication[]> {
-        await this.mdnsClient.start('_dapr._tcp.local');
+        if (!this.mdnsClient) {
+            this.mdnsClient = this.mdnsProvider.createClient('_dapr._tcp.local');
+            
+            this.downListener = this.mdnsClient.onServiceDown(
+                service => {
+                    const application = MdnsBasedDaprApplicationProvider.toApplication(service);
 
-        return Promise.resolve(this.applications ?? []);
+                    if (application) {
+                        const index = this.applications.findIndex(a => a.appId === application.appId);
+                        
+                        if (index !== -1) {
+                            this.applications.splice(index);
+
+                            this.onDidChangeEmitter.fire();
+                        }
+                    }
+
+                    this.onDidChangeEmitter.fire();
+                });
+
+            this.upListener = this.mdnsClient.onServiceUp(
+                service => {
+                    const application = MdnsBasedDaprApplicationProvider.toApplication(service);
+
+                    if (application) {
+                        const index = this.applications.findIndex(a => a.appId === application.appId);
+                        
+                        if (index !== -1) {
+                            this.applications[index] = application;
+                        } else {
+                            this.applications.push(application);
+                        }
+
+                        this.onDidChangeEmitter.fire();
+                    }
+                });
+
+            await this.mdnsClient.start();
+        }
+
+        return Promise.resolve(this.applications);
+    }
+
+    private static toApplication(service: MdnsService): DaprApplication | undefined {
+        const parsedText = service.text.map(t => t.split('=')).filter(t => t.length === 2);
+
+        const appId = parsedText.find(t => t[0] === 'appId')?.[1];
+        const httpPort = parsedText.find(t => t[0] === 'httpPort')?.[1];
+        
+        if (appId && httpPort) {
+            return {
+                appId,
+                httpPort: parseInt(httpPort, 10)
+            };
+        } else {
+            return undefined;
+        }
     }
 }
 

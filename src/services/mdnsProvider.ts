@@ -9,12 +9,17 @@ export interface MdnsService {
     text: string[];
 }
 
+export interface MdnsProvider {
+    createClient(type: string): MdnsClient;
+}
+
 export interface MdnsClient {
     readonly onServiceDown: vscode.Event<MdnsService>;
     readonly onServiceUp: vscode.Event<MdnsService>;
 
-    start(type: string): Promise<void>;
-    stop(): Promise<void>;
+    dispose(): void;
+    start(): Promise<void>;
+    stop(): void;
 }
 
 function isAddressAnswer(answer: mdns.MdnsAnswer): answer is mdns.MdnsAddressAnswer {
@@ -33,15 +38,16 @@ function isTextAnswer(answer: mdns.MdnsAnswer): answer is mdns.MdnsTextAnswer {
     return answer.type === 'TXT';
 }
 
-export default class MulticastDnsMdnsClient extends vscode.Disposable implements MdnsClient {
+class MulticastDnsMdnsClient extends vscode.Disposable implements MdnsClient {
     private readonly serviceUpEmitter = new vscode.EventEmitter<MdnsService>();
     private readonly serviceDownEmitter = new vscode.EventEmitter<MdnsService>();
     private readonly instance = mdns();
-    private type: string | undefined;
     private knownServices: { [key: string]: MdnsService } = {};
 
-    constructor() {
+    constructor(private readonly type: string) {
         super(() => {
+            this.stop();
+
             this.serviceUpEmitter.dispose();
             this.serviceDownEmitter.dispose();
             this.instance.destroy();
@@ -59,34 +65,30 @@ export default class MulticastDnsMdnsClient extends vscode.Disposable implements
         return this.serviceUpEmitter.event;
     }
 
-    async start(type: string): Promise<void> {
-        await this.stop();
-
-        this.type = type;
+    async start(): Promise<void> {
+        this.stop();
 
         // eslint-disable-next-line @typescript-eslint/unbound-method
         this.instance.on('response', this.onResponse);
 
-        await this.query(type);
+        await this.query();
     }
 
-    stop(): Promise<void> {
+    stop(): void {
         // eslint-disable-next-line @typescript-eslint/unbound-method
         this.instance.removeListener('response', this.onResponse);
 
         this.knownServices = {};
-
-        return Promise.resolve();
     }
 
-    private query(type: string): Promise<void> {
+    private query(): Promise<void> {
         return new Promise(
             (resolve, reject) => {
                 this.instance.query(
                     {
                         questions: [
                             {
-                                name: type,
+                                name: this.type,
                                 type: 'PTR'
                             }
                         ]
@@ -162,5 +164,11 @@ export default class MulticastDnsMdnsClient extends vscode.Disposable implements
                 this.serviceDownEmitter.fire(service);
             }
         });
+    }
+}
+
+export default class MulticastDnsMdnsProvider implements MdnsProvider {
+    createClient(type: string): MdnsClient {
+        return new MulticastDnsMdnsClient(type);
     }
 }

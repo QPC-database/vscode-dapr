@@ -9,7 +9,7 @@ import DaprdDownTaskProvider from './tasks/daprdDownTaskProvider';
 import { AzureUserInput, createAzExtOutputChannel, createTelemetryReporter, registerUIExtensionVariables, IActionContext } from 'vscode-azureextensionui';
 import ext from './ext';
 import DaprApplicationTreeDataProvider from './views/applications/daprApplicationTreeDataProvider';
-import ProcessBasedDaprApplicationProvider, { MdnsBasedDaprApplicationProvider } from './services/daprApplicationProvider';
+import { MdnsBasedDaprApplicationProvider } from './services/daprApplicationProvider';
 import createInvokeGetCommand from './commands/applications/invokeGet';
 import createInvokePostCommand from './commands/applications/invokePost';
 import { createPublishAllMessageCommand, createPublishMessageCommand } from './commands/applications/publishMessage';
@@ -23,11 +23,10 @@ import createReadDocumentationCommand from './commands/help/readDocumentation';
 import createReportIssueCommand from './commands/help/reportIssue';
 import createReviewIssuesCommand from './commands/help/reviewIssues';
 import createGetStartedCommand from './commands/help/getStarted';
-import createPlatformProcessProvider from './services/processProvider';
 import LocalDaprInstallationManager from './services/daprInstallationManager';
 import HandlebarsTemplateScaffolder from './scaffolding/templateScaffolder';
 import LocalScaffolder from './scaffolding/scaffolder';
-import MulticastDnsMdnsClient from './services/mdnsClient';
+import MulticastDnsMdnsProvider from './services/mdnsProvider';
 
 export function activate(context: vscode.ExtensionContext): Promise<void> {
 	function registerDisposable<T extends vscode.Disposable>(disposable: T): T {
@@ -51,7 +50,7 @@ export function activate(context: vscode.ExtensionContext): Promise<void> {
 		(actionContext: IActionContext) => {
 			actionContext.telemetry.properties.isActivationEvent = 'true';
 			
-			const daprApplicationProvider = registerDisposable(new MdnsBasedDaprApplicationProvider(registerDisposable(new MulticastDnsMdnsClient())));
+			const daprApplicationProvider = registerDisposable(new MdnsBasedDaprApplicationProvider(new MulticastDnsMdnsProvider()));
 			const daprClient = new HttpDaprClient(new AxiosHttpClient());
 			const ui = new AggregateUserInput(ext.ui);
 
